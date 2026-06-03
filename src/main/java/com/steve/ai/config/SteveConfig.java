@@ -1,22 +1,22 @@
 package com.steve.ai.config;
 
-import net.minecraftforge.common.ForgeConfigSpec;
+import net.neoforged.neoforge.common.ModConfigSpec;
 
 public class SteveConfig {
-    public static final ForgeConfigSpec SPEC;
-    public static final ForgeConfigSpec.ConfigValue<String> AI_PROVIDER;
-    public static final ForgeConfigSpec.ConfigValue<String> OPENAI_API_KEY;
-    public static final ForgeConfigSpec.ConfigValue<String> OPENAI_MODEL;
-    public static final ForgeConfigSpec.ConfigValue<String> ANTHROPIC_API_KEY;
-    public static final ForgeConfigSpec.ConfigValue<String> ANTHROPIC_MODEL;
-    public static final ForgeConfigSpec.IntValue MAX_TOKENS;
-    public static final ForgeConfigSpec.DoubleValue TEMPERATURE;
-    public static final ForgeConfigSpec.IntValue ACTION_TICK_DELAY;
-    public static final ForgeConfigSpec.BooleanValue ENABLE_CHAT_RESPONSES;
-    public static final ForgeConfigSpec.IntValue MAX_ACTIVE_STEVES;
+    public static final ModConfigSpec SPEC;
+    public static final ModConfigSpec.ConfigValue<String> AI_PROVIDER;
+    public static final ModConfigSpec.ConfigValue<String> OPENAI_API_KEY;
+    public static final ModConfigSpec.ConfigValue<String> OPENAI_MODEL;
+    public static final ModConfigSpec.ConfigValue<String> ANTHROPIC_API_KEY;
+    public static final ModConfigSpec.ConfigValue<String> ANTHROPIC_MODEL;
+    public static final ModConfigSpec.IntValue MAX_TOKENS;
+    public static final ModConfigSpec.DoubleValue TEMPERATURE;
+    public static final ModConfigSpec.IntValue ACTION_TICK_DELAY;
+    public static final ModConfigSpec.BooleanValue ENABLE_CHAT_RESPONSES;
+    public static final ModConfigSpec.IntValue MAX_ACTIVE_STEVES;
 
     static {
-        ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
+        ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
 
         builder.comment("AI API Configuration").push("ai");
         
