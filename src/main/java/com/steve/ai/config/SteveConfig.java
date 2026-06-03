@@ -14,6 +14,10 @@ public class SteveConfig {
     public static final ModConfigSpec.IntValue ACTION_TICK_DELAY;
     public static final ModConfigSpec.BooleanValue ENABLE_CHAT_RESPONSES;
     public static final ModConfigSpec.IntValue MAX_ACTIVE_STEVES;
+    public static final ModConfigSpec.IntValue CODE_MAX_ACTIONS;
+    public static final ModConfigSpec.IntValue CODE_STATEMENT_LIMIT;
+    public static final ModConfigSpec.IntValue CODE_MAX_RETRIES;
+    public static final ModConfigSpec.IntValue CODE_PLACEMENT_RADIUS;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -72,6 +76,26 @@ public class SteveConfig {
             .comment("Maximum number of Steves that can be active simultaneously")
             .defineInRange("maxActiveSteves", 10, 1, 50);
         
+        builder.pop();
+
+        builder.comment("LLM Code-Execution Configuration").push("codeExecution");
+
+        CODE_MAX_ACTIONS = builder
+            .comment("Maximum actions a single generated program may queue")
+            .defineInRange("maxActions", 1024, 1, 100000);
+
+        CODE_STATEMENT_LIMIT = builder
+            .comment("GraalVM statement limit per program (guards against infinite loops)")
+            .defineInRange("statementLimit", 5000000, 1000, 1000000000);
+
+        CODE_MAX_RETRIES = builder
+            .comment("How many times to ask the LLM to fix a failing program before giving up")
+            .defineInRange("maxRetries", 2, 0, 5);
+
+        CODE_PLACEMENT_RADIUS = builder
+            .comment("Max distance (blocks) from Steve that a program may place blocks")
+            .defineInRange("placementRadius", 64, 4, 256);
+
         builder.pop();
 
         SPEC = builder.build();
