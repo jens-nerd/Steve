@@ -60,9 +60,13 @@ dependencies {
     implementation 'org.graalvm.polyglot:polyglot:24.2.1'
     implementation 'org.graalvm.polyglot:js:24.2.1'
 
+    // Gson — JSON parsing in async LLM clients and tests
+    implementation 'com.google.code.gson:gson:2.10.1'
+
     // JUnit 5
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.3'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.3'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.9.3'
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
