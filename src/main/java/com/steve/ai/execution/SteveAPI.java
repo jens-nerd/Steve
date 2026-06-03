@@ -168,12 +168,23 @@ public class SteveAPI {
             throw new IllegalArgumentException("Position must include x, y, z coordinates");
         }
 
+        int px = position.get("x").intValue();
+        int py = position.get("y").intValue();
+        int pz = position.get("z").intValue();
+
+        if (steve != null) {
+            var p = steve.position();
+            if (!withinRadius(p.x, p.y, p.z, px, py, pz, placementRadius)) {
+                throw new IllegalArgumentException(
+                    "Cannot place block beyond " + placementRadius + " blocks from Steve");
+            }
+        }
+
         Map<String, Object> params = new HashMap<>();
         params.put("block", blockType.toLowerCase());
-        params.put("x", position.get("x").intValue());
-        params.put("y", position.get("y").intValue());
-        params.put("z", position.get("z").intValue());
-
+        params.put("x", px);
+        params.put("y", py);
+        params.put("z", pz);
         enqueue(new Task("place", params));
     }
 
@@ -354,6 +365,13 @@ public class SteveAPI {
     /** Discard all buffered actions (used when a script fails). */
     public void clearBuffer() {
         buffer.clear();
+    }
+
+    /** True if (x,y,z) is within {@code radius} blocks (Euclidean) of Steve's position. */
+    public static boolean withinRadius(double sx, double sy, double sz,
+                                       int x, int y, int z, int radius) {
+        double dx = x - sx, dy = y - sy, dz = z - sz;
+        return (dx * dx + dy * dy + dz * dz) <= (double) radius * radius;
     }
 
     /**
