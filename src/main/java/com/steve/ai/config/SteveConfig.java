@@ -7,6 +7,8 @@ public class SteveConfig {
     public static final ForgeConfigSpec.ConfigValue<String> AI_PROVIDER;
     public static final ForgeConfigSpec.ConfigValue<String> OPENAI_API_KEY;
     public static final ForgeConfigSpec.ConfigValue<String> OPENAI_MODEL;
+    public static final ForgeConfigSpec.ConfigValue<String> ANTHROPIC_API_KEY;
+    public static final ForgeConfigSpec.ConfigValue<String> ANTHROPIC_MODEL;
     public static final ForgeConfigSpec.IntValue MAX_TOKENS;
     public static final ForgeConfigSpec.DoubleValue TEMPERATURE;
     public static final ForgeConfigSpec.IntValue ACTION_TICK_DELAY;
@@ -19,9 +21,21 @@ public class SteveConfig {
         builder.comment("AI API Configuration").push("ai");
         
         AI_PROVIDER = builder
-            .comment("AI provider to use: 'groq' (FASTEST, FREE), 'openai', or 'gemini'")
-            .define("provider", "groq");
-        
+            .comment("AI provider to use: 'claude' (default), 'groq' (FASTEST, FREE), 'openai', or 'gemini'")
+            .define("provider", "claude");
+
+        builder.pop();
+
+        builder.comment("Anthropic (Claude) API Configuration").push("anthropic");
+
+        ANTHROPIC_API_KEY = builder
+            .comment("Your Anthropic API key (required when provider = 'claude')")
+            .define("apiKey", "");
+
+        ANTHROPIC_MODEL = builder
+            .comment("Claude model to use (claude-haiku-4-5, claude-sonnet-4-6, claude-opus-4-8)")
+            .define("model", "claude-haiku-4-5");
+
         builder.pop();
 
         builder.comment("OpenAI/Gemini API Configuration (same key field used for both)").push("openai");

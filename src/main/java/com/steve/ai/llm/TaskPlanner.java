@@ -23,6 +23,7 @@ public class TaskPlanner {
     private final AsyncLLMClient asyncOpenAIClient;
     private final AsyncLLMClient asyncGroqClient;
     private final AsyncLLMClient asyncGeminiClient;
+    private final AsyncLLMClient asyncClaudeClient;
     private final LLMCache llmCache;
     private final LLMFallbackHandler fallbackHandler;
 
@@ -36,21 +37,29 @@ public class TaskPlanner {
         this.llmCache = new LLMCache();
         this.fallbackHandler = new LLMFallbackHandler();
 
-        // Initialize async clients with resilience wrappers
-        String apiKey = SteveConfig.OPENAI_API_KEY.get();
+        // Initialize async clients with resilience wrappers.
+        // Keys default to a placeholder so an unconfigured provider (e.g. an empty OpenAI
+        // key when running Claude-only) fails at call time with HTTP 401 instead of
+        // throwing during construction of every base client.
+        String apiKey = orPlaceholder(SteveConfig.OPENAI_API_KEY.get());
         String model = SteveConfig.OPENAI_MODEL.get();
         int maxTokens = SteveConfig.MAX_TOKENS.get();
         double temperature = SteveConfig.TEMPERATURE.get();
+
+        String anthropicApiKey = orPlaceholder(SteveConfig.ANTHROPIC_API_KEY.get());
+        String anthropicModel = SteveConfig.ANTHROPIC_MODEL.get();
 
         // Create base async clients
         AsyncLLMClient baseOpenAI = new AsyncOpenAIClient(apiKey, model, maxTokens, temperature);
         AsyncLLMClient baseGroq = new AsyncGroqClient(apiKey, "llama-3.1-8b-instant", 500, temperature);
         AsyncLLMClient baseGemini = new AsyncGeminiClient(apiKey, "gemini-1.5-flash", maxTokens, temperature);
+        AsyncLLMClient baseClaude = new AsyncClaudeClient(anthropicApiKey, anthropicModel, maxTokens, temperature);
 
         // Wrap with resilience patterns
         this.asyncOpenAIClient = new ResilientLLMClient(baseOpenAI, llmCache, fallbackHandler);
         this.asyncGroqClient = new ResilientLLMClient(baseGroq, llmCache, fallbackHandler);
         this.asyncGeminiClient = new ResilientLLMClient(baseGemini, llmCache, fallbackHandler);
+        this.asyncClaudeClient = new ResilientLLMClient(baseClaude, llmCache, fallbackHandler);
 
         SteveMod.LOGGER.info("TaskPlanner initialized with async resilient clients");
     }
@@ -130,10 +139,13 @@ public class TaskPlanner {
             SteveMod.LOGGER.info("[Async] Requesting AI plan for Steve '{}' using {}: {}",
                 steve.getSteveName(), provider, command);
 
-            // Build params map
+            // Build params map (model depends on provider so Claude doesn't receive an OpenAI model name)
+            String modelForProvider = provider.equals("claude")
+                ? SteveConfig.ANTHROPIC_MODEL.get()
+                : SteveConfig.OPENAI_MODEL.get();
             Map<String, Object> params = Map.of(
                 "systemPrompt", systemPrompt,
-                "model", SteveConfig.OPENAI_MODEL.get(),
+                "model", modelForProvider,
                 "maxTokens", SteveConfig.MAX_TOKENS.get(),
                 "temperature", SteveConfig.TEMPERATURE.get()
             );
@@ -184,6 +196,7 @@ public class TaskPlanner {
      */
     private AsyncLLMClient getAsyncClient(String provider) {
         return switch (provider) {
+            case "claude" -> asyncClaudeClient;
             case "openai" -> asyncOpenAIClient;
             case "gemini" -> asyncGeminiClient;
             case "groq" -> asyncGroqClient;
@@ -211,6 +224,18 @@ public class TaskPlanner {
      */
     public boolean isProviderHealthy(String provider) {
         return getAsyncClient(provider).isHealthy();
+    }
+
+    /**
+     * Returns the key, or a non-empty placeholder if it is null/empty.
+     *
+     * <p>Base clients reject empty keys in their constructor. Since all base clients are
+     * created eagerly, an unconfigured provider would otherwise break planner construction.
+     * The placeholder lets construction succeed; an unconfigured provider that is actually
+     * selected fails at call time with HTTP 401 instead.</p>
+     */
+    private static String orPlaceholder(String key) {
+        return (key == null || key.isEmpty()) ? "not-configured" : key;
     }
 
     public boolean validateTask(Task task) {
