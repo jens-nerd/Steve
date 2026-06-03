@@ -189,6 +189,56 @@ public class TaskPlanner {
     }
 
     /**
+     * Asynchronously asks the LLM to WRITE a JavaScript program for the command and
+     * returns the extracted code (fences stripped). Single-shot — retries are
+     * orchestrated by the caller, which feeds {@code lastError} back in.
+     *
+     * @param lastError error text from a failed previous attempt, or null on the first try
+     * @return future of clean JS source, or null on transport failure / empty response
+     */
+    public CompletableFuture<String> planCodeAsync(SteveEntity steve, String command, String lastError) {
+        try {
+            String systemPrompt = CodePromptBuilder.buildSystemPrompt();
+            WorldKnowledge worldKnowledge = new WorldKnowledge(steve);
+            String userPrompt = CodePromptBuilder.buildUserPrompt(steve, command, worldKnowledge, lastError);
+
+            String provider = SteveConfig.AI_PROVIDER.get().toLowerCase();
+            SteveMod.LOGGER.info("[Code] Requesting JS program for Steve '{}' using {}: {}",
+                steve.getSteveName(), provider, command);
+
+            String modelForProvider = provider.equals("claude")
+                ? SteveConfig.ANTHROPIC_MODEL.get()
+                : SteveConfig.OPENAI_MODEL.get();
+            Map<String, Object> params = Map.of(
+                "systemPrompt", systemPrompt,
+                "model", modelForProvider,
+                "maxTokens", SteveConfig.MAX_TOKENS.get(),
+                "temperature", SteveConfig.TEMPERATURE.get()
+            );
+
+            return getAsyncClient(provider).sendAsync(userPrompt, params)
+                .thenApply(response -> {
+                    String content = response.getContent();
+                    if (content == null || content.isEmpty()) {
+                        SteveMod.LOGGER.error("[Code] Empty response from LLM");
+                        return null;
+                    }
+                    String code = CodeExtractor.extract(content);
+                    SteveMod.LOGGER.info("[Code] Program received ({} chars, {}ms, {} tokens, cache: {})",
+                        code.length(), response.getLatencyMs(), response.getTokensUsed(), response.isFromCache());
+                    return code;
+                })
+                .exceptionally(t -> {
+                    SteveMod.LOGGER.error("[Code] Error requesting program: {}", t.getMessage());
+                    return null;
+                });
+        } catch (Exception e) {
+            SteveMod.LOGGER.error("[Code] Error setting up code planning", e);
+            return CompletableFuture.completedFuture(null);
+        }
+    }
+
+    /**
      * Returns the appropriate async client based on provider config.
      *
      * @param provider Provider name ("openai", "groq", "gemini")
