@@ -27,7 +27,7 @@ public class CodeExecutionEngine {
 
     public CodeExecutionEngine(SteveEntity steve) {
         this.steve = steve;
-        this.steveAPI = new SteveAPI(steve);
+        this.steveAPI = new SteveAPI(steve, 1024, 64);
 
         // Create GraalVM context with strict security restrictions
         this.graalContext = Context.newBuilder("js")

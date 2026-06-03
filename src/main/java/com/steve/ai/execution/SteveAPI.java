@@ -8,27 +8,41 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import org.graalvm.polyglot.HostAccess;
 
 import java.util.*;
-import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * Safe API bridge between LLM-generated code and Minecraft.
- * All operations are validated and queued for execution.
+ * All operations are validated and buffered; callers commit the buffer
+ * into the live action queue only after a script succeeds (atomic planning).
  *
  * This class is exposed to JavaScript code as the `steve` global object.
  */
 public class SteveAPI {
     private final SteveEntity steve;
-    private final Queue<Task> actionQueue;
+    private final List<Task> buffer;
+    private final int maxActions;
+    private final int placementRadius;
 
-    public SteveAPI(SteveEntity steve) {
+    public SteveAPI(SteveEntity steve, int maxActions, int placementRadius) {
         this.steve = steve;
-        this.actionQueue = new LinkedBlockingQueue<>();
+        this.buffer = new ArrayList<>();
+        this.maxActions = maxActions;
+        this.placementRadius = placementRadius;
+    }
+
+    /** Buffer one task, enforcing the per-script action cap. */
+    private void enqueue(Task task) {
+        if (buffer.size() >= maxActions) {
+            throw new IllegalStateException(
+                "Action limit reached (" + maxActions + "); script enqueued too many actions");
+        }
+        buffer.add(task);
     }
 
     // ====================
-    // ASYNC OPERATIONS (Queue Actions)
+    // ASYNC OPERATIONS (Buffer Actions)
     // ====================
 
     /**
@@ -37,12 +51,13 @@ public class SteveAPI {
      * @param y Y coordinate
      * @param z Z coordinate
      */
+    @HostAccess.Export
     public void move(double x, double y, double z) {
         Map<String, Object> params = new HashMap<>();
         params.put("x", x);
         params.put("y", y);
         params.put("z", z);
-        actionQueue.add(new Task("pathfind", params));
+        enqueue(new Task("pathfind", params));
     }
 
     /**
@@ -50,6 +65,7 @@ public class SteveAPI {
      * @param structureType Type of structure (house, castle, tower, barn, etc.)
      * @param position Map with x, y, z coordinates
      */
+    @HostAccess.Export
     public void build(String structureType, Map<String, Double> position) {
         if (structureType == null || structureType.trim().isEmpty()) {
             throw new IllegalArgumentException("Structure type cannot be empty");
@@ -65,13 +81,14 @@ public class SteveAPI {
             params.put("z", position.get("z").intValue());
         }
 
-        actionQueue.add(new Task("build", params));
+        enqueue(new Task("build", params));
     }
 
     /**
      * Build a structure (using default location - in front of player)
      * @param structureType Type of structure
      */
+    @HostAccess.Export
     public void build(String structureType) {
         build(structureType, null);
     }
@@ -81,6 +98,7 @@ public class SteveAPI {
      * @param blockType Type of block/ore to mine (e.g., "iron_ore", "diamond_ore")
      * @param count Number of blocks to mine
      */
+    @HostAccess.Export
     public void mine(String blockType, int count) {
         if (blockType == null || blockType.trim().isEmpty()) {
             throw new IllegalArgumentException("Block type cannot be empty");
@@ -94,13 +112,14 @@ public class SteveAPI {
         params.put("blockType", blockType.toLowerCase());
         params.put("count", count);
 
-        actionQueue.add(new Task("mine", params));
+        enqueue(new Task("mine", params));
     }
 
     /**
      * Attack a target entity type
      * @param entityType Type of entity to attack (e.g., "zombie", "skeleton")
      */
+    @HostAccess.Export
     public void attack(String entityType) {
         if (entityType == null || entityType.trim().isEmpty()) {
             throw new IllegalArgumentException("Entity type cannot be empty");
@@ -109,7 +128,7 @@ public class SteveAPI {
         Map<String, Object> params = new HashMap<>();
         params.put("target", entityType.toLowerCase());
 
-        actionQueue.add(new Task("attack", params));
+        enqueue(new Task("attack", params));
     }
 
     /**
@@ -117,6 +136,7 @@ public class SteveAPI {
      * @param itemName Name of item to craft (e.g., "iron_pickaxe", "crafting_table")
      * @param count Number of items to craft
      */
+    @HostAccess.Export
     public void craft(String itemName, int count) {
         if (itemName == null || itemName.trim().isEmpty()) {
             throw new IllegalArgumentException("Item name cannot be empty");
@@ -130,7 +150,7 @@ public class SteveAPI {
         params.put("item", itemName.toLowerCase());
         params.put("count", count);
 
-        actionQueue.add(new Task("craft", params));
+        enqueue(new Task("craft", params));
     }
 
     /**
@@ -138,6 +158,7 @@ public class SteveAPI {
      * @param blockType Type of block to place
      * @param position Map with x, y, z coordinates
      */
+    @HostAccess.Export
     public void place(String blockType, Map<String, Double> position) {
         if (blockType == null || blockType.trim().isEmpty()) {
             throw new IllegalArgumentException("Block type cannot be empty");
@@ -153,13 +174,14 @@ public class SteveAPI {
         params.put("y", position.get("y").intValue());
         params.put("z", position.get("z").intValue());
 
-        actionQueue.add(new Task("place", params));
+        enqueue(new Task("place", params));
     }
 
     /**
      * Send a chat message
      * @param message Message to send
      */
+    @HostAccess.Export
     public void say(String message) {
         if (message != null && !message.trim().isEmpty()) {
             // TODO: Implement chat message sending
@@ -171,6 +193,7 @@ public class SteveAPI {
      * Follow a player by name
      * @param playerName Name of player to follow
      */
+    @HostAccess.Export
     public void follow(String playerName) {
         if (playerName == null || playerName.trim().isEmpty()) {
             throw new IllegalArgumentException("Player name cannot be empty");
@@ -179,7 +202,7 @@ public class SteveAPI {
         Map<String, Object> params = new HashMap<>();
         params.put("playerName", playerName);
 
-        actionQueue.add(new Task("follow", params));
+        enqueue(new Task("follow", params));
     }
 
     /**
@@ -187,6 +210,7 @@ public class SteveAPI {
      * @param resourceType Type of resource to gather
      * @param count Number to gather
      */
+    @HostAccess.Export
     public void gather(String resourceType, int count) {
         if (resourceType == null || resourceType.trim().isEmpty()) {
             throw new IllegalArgumentException("Resource type cannot be empty");
@@ -200,7 +224,7 @@ public class SteveAPI {
         params.put("resource", resourceType.toLowerCase());
         params.put("count", count);
 
-        actionQueue.add(new Task("gather", params));
+        enqueue(new Task("gather", params));
     }
 
     // ====================
@@ -211,6 +235,7 @@ public class SteveAPI {
      * Get Steve's current position
      * @return Map with x, y, z coordinates
      */
+    @HostAccess.Export
     public Map<String, Double> getPosition() {
         Vec3 pos = steve.position();
         Map<String, Double> position = new HashMap<>();
@@ -225,6 +250,7 @@ public class SteveAPI {
      * @param radius Search radius (max 16 blocks)
      * @return List of block type names
      */
+    @HostAccess.Export
     public List<String> getNearbyBlocks(int radius) {
         if (radius <= 0 || radius > 16) {
             throw new IllegalArgumentException("Radius must be between 1 and 16");
@@ -256,6 +282,7 @@ public class SteveAPI {
      * @param radius Search radius (max 32 blocks)
      * @return List of entity type names
      */
+    @HostAccess.Export
     public List<String> getNearbyEntities(int radius) {
         if (radius <= 0 || radius > 32) {
             throw new IllegalArgumentException("Radius must be between 1 and 32");
@@ -281,24 +308,26 @@ public class SteveAPI {
     }
 
     /**
-     * Check if Steve is idle (no pending actions)
-     * @return true if action queue is empty, false otherwise
+     * Check if Steve is idle (no buffered actions)
+     * @return true if buffer is empty, false otherwise
      */
+    @HostAccess.Export
     public boolean isIdle() {
-        return actionQueue.isEmpty();
+        return buffer.isEmpty();
     }
 
     /**
      * Get the number of pending actions
-     * @return Number of actions in queue
+     * @return Number of actions in buffer
      */
+    @HostAccess.Export
     public int getPendingActionCount() {
-        return actionQueue.size();
+        return buffer.size();
     }
 
     /**
      * Wait for a duration (in milliseconds)
-     * NOTE: This is implemented as a busy-wait for simplicity
+     * NOTE: NOT exported to JS — would freeze the server thread.
      * @param milliseconds Time to wait
      */
     public void wait(int milliseconds) throws InterruptedException {
@@ -311,19 +340,20 @@ public class SteveAPI {
     // INTERNAL METHODS
     // ====================
 
-    /**
-     * Get the action queue (for ActionExecutor to consume)
-     * @return Queue of pending tasks
-     */
-    public Queue<Task> getActionQueue() {
-        return actionQueue;
+    /** Number of actions currently buffered (test/diagnostic helper). */
+    public int getBufferedCount() {
+        return buffer.size();
     }
 
-    /**
-     * Clear all pending actions
-     */
-    public void clearActions() {
-        actionQueue.clear();
+    /** Commit all buffered actions into the target queue and clear the buffer. */
+    public void drainTo(Queue<Task> target) {
+        target.addAll(buffer);
+        buffer.clear();
+    }
+
+    /** Discard all buffered actions (used when a script fails). */
+    public void clearBuffer() {
+        buffer.clear();
     }
 
     /**
