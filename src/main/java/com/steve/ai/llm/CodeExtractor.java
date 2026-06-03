@@ -6,11 +6,12 @@ import java.util.regex.Pattern;
 /**
  * Extracts executable JavaScript from a raw LLM response, removing any
  * Markdown code fences (```js ... ``` or ``` ... ```).
+ * If multiple fenced blocks are present, the first one is returned.
  */
 public final class CodeExtractor {
 
     private static final Pattern FENCE =
-        Pattern.compile("```(?:js|javascript)?\\s*\\r?\\n(.*?)```", Pattern.DOTALL);
+        Pattern.compile("```(?:js|javascript)?\\s*\\r?\\n?(.*?)```", Pattern.DOTALL);
 
     private CodeExtractor() {}
 

@@ -26,4 +26,17 @@ class CodeExtractorTest {
     void returnsEmptyForNull() {
         assertEquals("", CodeExtractor.extract(null));
     }
+
+    @Test
+    void stripsJavascriptFencedBlock() {
+        String raw = "```javascript\nsteve.attack('hostile');\n```";
+        assertEquals("steve.attack('hostile');", CodeExtractor.extract(raw));
+    }
+
+    @Test
+    void stripsFenceWithoutNewlineAfterTag() {
+        // Pathological but possible: no newline after the opening fence tag.
+        String raw = "```js steve.place('sunflower', {x:0,y:64,z:0});```";
+        assertEquals("steve.place('sunflower', {x:0,y:64,z:0});", CodeExtractor.extract(raw));
+    }
 }
