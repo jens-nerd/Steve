@@ -3,17 +3,19 @@ package com.steve.ai.client;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.steve.ai.SteveMod;
 import net.minecraft.client.KeyMapping;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.minecraft.resources.Identifier;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import org.lwjgl.glfw.GLFW;
 
-@Mod.EventBusSubscriber(modid = SteveMod.MODID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
+@EventBusSubscriber(modid = SteveMod.MODID, value = Dist.CLIENT)
 public class KeyBindings {
-    
-    public static final String KEY_CATEGORY = "key.categories.steve";
-    
+
+    public static final KeyMapping.Category KEY_CATEGORY =
+        KeyMapping.Category.register(Identifier.fromNamespaceAndPath(SteveMod.MODID, "main"));
+
     public static KeyMapping TOGGLE_GUI;
 
     @SubscribeEvent
@@ -24,7 +26,7 @@ public class KeyBindings {
             GLFW.GLFW_KEY_K, // K key
             KEY_CATEGORY
         );
-        
-        event.register(TOGGLE_GUI);    }
-}
 
+        event.register(TOGGLE_GUI);
+    }
+}
