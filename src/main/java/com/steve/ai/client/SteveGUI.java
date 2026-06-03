@@ -1,14 +1,18 @@
 package com.steve.ai.client;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import com.steve.ai.SteveMod;
 import com.steve.ai.entity.SteveEntity;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.Component;
-import net.minecraftforge.client.event.RenderGuiOverlayEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.RenderGuiLayerEvent;
+import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,19 +22,20 @@ import java.util.List;
  * Inspired by Cursor's composer - slides in/out from the right side.
  * Now with scrollable message history!
  */
+@EventBusSubscriber(modid = SteveMod.MODID, value = Dist.CLIENT)
 public class SteveGUI {
     private static final int PANEL_WIDTH = 200;
     private static final int PANEL_PADDING = 6;
     private static final int ANIMATION_SPEED = 20;
     private static final int MESSAGE_HEIGHT = 12;
     private static final int MAX_MESSAGES = 500;
-    
+
     private static boolean isOpen = false;
     private static float slideOffset = PANEL_WIDTH; // Start fully hidden
     private static EditBox inputBox;
     private static List<String> commandHistory = new ArrayList<>();
     private static int historyIndex = -1;
-    
+
     // Message history and scrolling
     private static List<ChatMessage> messages = new ArrayList<>();
     private static int scrollOffset = 0;
@@ -39,7 +44,7 @@ public class SteveGUI {
     private static final int BORDER_COLOR = 0x40404040; // More transparent border
     private static final int HEADER_COLOR = 0x25252525; // More transparent header (~15% opacity)
     private static final int TEXT_COLOR = 0xFFFFFFFF;
-    
+
     // Message bubble colors
     private static final int USER_BUBBLE_COLOR = 0xC04CAF50; // Green bubble for user
     private static final int STEVE_BUBBLE_COLOR = 0xC02196F3; // Blue bubble for Steve
@@ -50,7 +55,7 @@ public class SteveGUI {
         String text;
         int bubbleColor;
         boolean isUser; // true if message from user
-        
+
         ChatMessage(String sender, String text, int bubbleColor, boolean isUser) {
             this.sender = sender;
             this.text = text;
@@ -61,9 +66,9 @@ public class SteveGUI {
 
     public static void toggle() {
         isOpen = !isOpen;
-        
+
         Minecraft mc = Minecraft.getInstance();
-        
+
         if (isOpen) {
             initializeInputBox();
             mc.setScreen(new SteveOverlayScreen());
@@ -87,7 +92,7 @@ public class SteveGUI {
     private static void initializeInputBox() {
         Minecraft mc = Minecraft.getInstance();
         if (inputBox == null) {
-            inputBox = new EditBox(mc.font, 0, 0, PANEL_WIDTH - 20, 20, 
+            inputBox = new EditBox(mc.font, 0, 0, PANEL_WIDTH - 20, 20,
                 Component.literal("Command"));
             inputBox.setMaxLength(256);
             inputBox.setHint(Component.literal("Tell Steve what to do..."));
@@ -129,8 +134,8 @@ public class SteveGUI {
     }
 
     @SubscribeEvent
-    public static void onRenderOverlay(RenderGuiOverlayEvent.Post event) {
-        if (event.getOverlay().id().toString().contains("hotbar")) {
+    public static void onRenderOverlay(RenderGuiLayerEvent.Post event) {
+        if (event.getName().equals(VanillaGuiLayers.HOTBAR)) {
             return; // Don't render over hotbar
         }
 
@@ -146,30 +151,22 @@ public class SteveGUI {
         // Don't render if completely hidden
         if (slideOffset >= PANEL_WIDTH) return;
 
-        GuiGraphics graphics = event.getGuiGraphics();
+        GuiGraphicsExtractor graphics = event.getGuiGraphics();
         int screenWidth = mc.getWindow().getGuiScaledWidth();
         int screenHeight = mc.getWindow().getGuiScaledHeight();
-        
+
         int panelX = (int) (screenWidth - PANEL_WIDTH + slideOffset);
         int panelY = 0;
         int panelHeight = screenHeight;
 
-        RenderSystem.enableBlend();
-        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-        RenderSystem.blendFuncSeparate(
-            com.mojang.blaze3d.platform.GlStateManager.SourceFactor.SRC_ALPHA,
-            com.mojang.blaze3d.platform.GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA,
-            com.mojang.blaze3d.platform.GlStateManager.SourceFactor.ONE,
-            com.mojang.blaze3d.platform.GlStateManager.DestFactor.ZERO
-        );
         graphics.fillGradient(panelX, panelY, screenWidth, panelHeight, BACKGROUND_COLOR, BACKGROUND_COLOR);
-        
+
         graphics.fillGradient(panelX - 2, panelY, panelX, panelHeight, BORDER_COLOR, BORDER_COLOR);
 
         int headerHeight = 35;
         graphics.fillGradient(panelX, panelY, screenWidth, headerHeight, HEADER_COLOR, HEADER_COLOR);
-        graphics.drawString(mc.font, "§lSteve AI", panelX + PANEL_PADDING, panelY + 8, TEXT_COLOR);
-        graphics.drawString(mc.font, "§7Press K to close", panelX + PANEL_PADDING, panelY + 20, 0xFF888888);
+        graphics.text(mc.font, "§lSteve AI", panelX + PANEL_PADDING, panelY + 8, TEXT_COLOR);
+        graphics.text(mc.font, "§7Press K to close", panelX + PANEL_PADDING, panelY + 20, 0xFF888888);
 
         // Message history area
         int inputAreaY = screenHeight - 80;
@@ -189,67 +186,67 @@ public class SteveGUI {
 
         // Render messages (scrollable)
         int yPos = messageAreaTop + 5;
-        
+
         // Clip rendering to message area
         graphics.enableScissor(panelX, messageAreaTop, screenWidth, messageAreaBottom);
-        
+
         if (messages.isEmpty()) {
-            graphics.drawString(mc.font, "§7No messages yet...", 
+            graphics.text(mc.font, "§7No messages yet...",
                 panelX + PANEL_PADDING, yPos, 0xFF666666);
-            graphics.drawString(mc.font, "§7Type a command below!", 
+            graphics.text(mc.font, "§7Type a command below!",
                 panelX + PANEL_PADDING, yPos + 12, 0xFF555555);
         } else {
             int currentY = messageAreaBottom - 5; // Start from bottom
-            
+
             for (int i = messages.size() - 1; i >= 0; i--) {
                 ChatMessage msg = messages.get(i);
-                
+
                 int maxBubbleWidth = PANEL_WIDTH - (PANEL_PADDING * 3); // Leave space on sides
                 String wrappedText = wrapText(mc.font, msg.text, maxBubbleWidth - 10);
                 int textWidth = mc.font.width(wrappedText);
                 int textHeight = MESSAGE_HEIGHT;
                 int bubbleWidth = Math.min(textWidth + 10, maxBubbleWidth);
                 int bubbleHeight = textHeight + 10;
-                
+
                 int msgY = currentY - bubbleHeight + scrollOffset;
-                
+
                 if (msgY + bubbleHeight < messageAreaTop - 20 || msgY > messageAreaBottom + 20) {
                     currentY -= bubbleHeight + 5;
                     continue;
                 }
-                
+
                 // Render message bubble based on sender
                 if (msg.isUser) {
                     int bubbleX = screenWidth - bubbleWidth - PANEL_PADDING - 5;
-                    
+
                     // Draw bubble background with gradient for alpha support
                     graphics.fillGradient(bubbleX - 3, msgY - 3, bubbleX + bubbleWidth + 3, msgY + bubbleHeight, msg.bubbleColor, msg.bubbleColor);
-                    
+
                     // Draw sender name (small, above bubble)
-                    graphics.drawString(mc.font, "§7" + msg.sender, bubbleX, msgY - 12, 0xFFCCCCCC);
-                    
+                    graphics.text(mc.font, "§7" + msg.sender, bubbleX, msgY - 12, 0xFFCCCCCC);
+
                     // Draw message text (white on colored bubble)
-                    graphics.drawString(mc.font, wrappedText, bubbleX + 5, msgY + 5, 0xFFFFFFFF);
-                    
+                    graphics.text(mc.font, wrappedText, bubbleX + 5, msgY + 5, 0xFFFFFFFF);
+
                 } else {
                     int bubbleX = panelX + PANEL_PADDING;
-                    
+
                     // Draw bubble background with gradient for alpha support
                     graphics.fillGradient(bubbleX - 3, msgY - 3, bubbleX + bubbleWidth + 3, msgY + bubbleHeight, msg.bubbleColor, msg.bubbleColor);
-                    
+
                     // Draw sender name (small, above bubble)
-                    graphics.drawString(mc.font, "§l" + msg.sender, bubbleX, msgY - 12, TEXT_COLOR);
-                    
+                    graphics.text(mc.font, "§l" + msg.sender, bubbleX, msgY - 12, TEXT_COLOR);
+
                     // Draw message text (white on colored bubble)
-                    graphics.drawString(mc.font, wrappedText, bubbleX + 5, msgY + 5, 0xFFFFFFFF);
+                    graphics.text(mc.font, wrappedText, bubbleX + 5, msgY + 5, 0xFFFFFFFF);
                 }
-                
+
                 currentY -= bubbleHeight + 5 + 12; // Extra space for sender name
             }
         }
-        
+
         graphics.disableScissor();
-        
+
         if (maxScroll > 0) {
             int scrollBarHeight = Math.max(20, (messageAreaHeight * messageAreaHeight) / (maxScroll + messageAreaHeight));
             int scrollBarY = messageAreaTop + (int)((messageAreaHeight - scrollBarHeight) * (1.0f - (float)scrollOffset / maxScroll));
@@ -258,19 +255,18 @@ public class SteveGUI {
 
         // Command input area (bottom) with gradient for alpha support
         graphics.fillGradient(panelX, inputAreaY, screenWidth, screenHeight, HEADER_COLOR, HEADER_COLOR);
-        graphics.drawString(mc.font, "§7Command:", panelX + PANEL_PADDING, inputAreaY + 10, 0xFF888888);
+        graphics.text(mc.font, "§7Command:", panelX + PANEL_PADDING, inputAreaY + 10, 0xFF888888);
 
         if (inputBox != null && isOpen) {
             inputBox.setX(panelX + PANEL_PADDING);
             inputBox.setY(inputAreaY + 25);
             inputBox.setWidth(PANEL_WIDTH - (PANEL_PADDING * 2));
-            inputBox.render(graphics, (int)mc.mouseHandler.xpos(), (int)mc.mouseHandler.ypos(), mc.getFrameTime());
+            inputBox.extractRenderState(graphics, (int)mc.mouseHandler.xpos(), (int)mc.mouseHandler.ypos(),
+                mc.getDeltaTracker().getGameTimeDeltaPartialTick(false));
         }
 
-        graphics.drawString(mc.font, "§8Enter: Send | ↑↓: History | Scroll: Messages", 
+        graphics.text(mc.font, "§8Enter: Send | ↑↓: History | Scroll: Messages",
             panelX + PANEL_PADDING, screenHeight - 15, 0xFF555555);
-        
-        RenderSystem.disableBlend();
     }
 
     /**
@@ -291,17 +287,17 @@ public class SteveGUI {
         return result.toString();
     }
 
-    public static boolean handleKeyPress(int keyCode, int scanCode, int modifiers) {
+    public static boolean handleKeyPress(KeyEvent keyEvent) {
         if (!isOpen || inputBox == null) return false;
 
-        Minecraft mc = Minecraft.getInstance();
-        
+        int keyCode = keyEvent.key();
+
         // Escape key - close panel
         if (keyCode == 256) { // ESC
             toggle();
             return true;
         }
-        
+
         // Enter key - send command
         if (keyCode == 257) {
             String command = inputBox.getValue().trim();
@@ -335,18 +331,18 @@ public class SteveGUI {
         }
 
         // Backspace, Delete, Home, End, Left, Right - pass to input box
-        if (keyCode == 259 || keyCode == 261 || keyCode == 268 || keyCode == 269 || 
+        if (keyCode == 259 || keyCode == 261 || keyCode == 268 || keyCode == 269 ||
             keyCode == 263 || keyCode == 262) {
-            inputBox.keyPressed(keyCode, scanCode, modifiers);
+            inputBox.keyPressed(keyEvent);
             return true;
         }
 
         return true; // Consume all keys to prevent game controls
     }
 
-    public static boolean handleCharTyped(char codePoint, int modifiers) {
+    public static boolean handleCharTyped(CharacterEvent characterEvent) {
         if (isOpen && inputBox != null) {
-            inputBox.charTyped(codePoint, modifiers);
+            inputBox.charTyped(characterEvent);
             return true; // Consumed
         }
         return false;
@@ -371,7 +367,7 @@ public class SteveGUI {
 
     public static void handleMouseScroll(double scrollDelta) {
         if (!isOpen) return;
-        
+
         int scrollAmount = (int)(scrollDelta * 3 * MESSAGE_HEIGHT);
         scrollOffset -= scrollAmount;
         scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll));
@@ -379,12 +375,12 @@ public class SteveGUI {
 
     private static void sendCommand(String command) {
         Minecraft mc = Minecraft.getInstance();
-        
+
         commandHistory.add(command);
         if (commandHistory.size() > 50) {
             commandHistory.remove(0);
         }
-        
+
         addUserMessage(command);
 
         if (command.toLowerCase().startsWith("spawn ")) {
@@ -398,7 +394,7 @@ public class SteveGUI {
         }
 
         List<String> targetSteves = parseTargetSteves(command);
-        
+
         if (targetSteves.isEmpty()) {
             var steves = SteveMod.getSteveManager().getAllSteves();
             if (!steves.isEmpty()) {
@@ -415,7 +411,7 @@ public class SteveGUI {
             for (String steveName : targetSteves) {
                 mc.player.connection.sendCommand("steve tell " + steveName + " " + command);
             }
-            
+
             if (targetSteves.size() > 1) {
                 addSystemMessage("→ " + String.join(", ", targetSteves) + ": " + command);
             } else {
@@ -423,12 +419,12 @@ public class SteveGUI {
             }
         }
     }
-    
+
     private static List<String> parseTargetSteves(String command) {
         List<String> targets = new ArrayList<>();
         String commandLower = command.toLowerCase();
-        
-        if (commandLower.startsWith("all steves ") || commandLower.startsWith("all ") || 
+
+        if (commandLower.startsWith("all steves ") || commandLower.startsWith("all ") ||
             commandLower.startsWith("everyone ") || commandLower.startsWith("everybody ")) {
             var allSteves = SteveMod.getSteveManager().getAllSteves();
             for (SteveEntity steve : allSteves) {
@@ -436,18 +432,18 @@ public class SteveGUI {
             }
             return targets;
         }
-        
+
         var allSteves = SteveMod.getSteveManager().getAllSteves();
         List<String> availableNames = new ArrayList<>();
         for (SteveEntity steve : allSteves) {
             availableNames.add(steve.getSteveName().toLowerCase());
         }
-        
+
         String[] parts = command.split(",");
         for (String part : parts) {
             String trimmed = part.trim();
             String firstWord = trimmed.split(" ")[0].toLowerCase();
-            
+
             if (availableNames.contains(firstWord)) {
                 for (SteveEntity steve : allSteves) {
                     if (steve.getSteveName().equalsIgnoreCase(firstWord)) {
@@ -457,17 +453,7 @@ public class SteveGUI {
                 }
             }
         }
-        
-        return targets;
-    }
 
-    public static void tick() {
-        if (isOpen && inputBox != null) {
-            inputBox.tick();
-            // Auto-focus input box when panel is open
-            if (!inputBox.isFocused()) {
-                inputBox.setFocused(true);
-            }
-        }
+        return targets;
     }
 }
