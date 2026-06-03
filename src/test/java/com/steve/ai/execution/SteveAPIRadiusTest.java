@@ -14,4 +14,10 @@ class SteveAPIRadiusTest {
     void withinRadiusFalseForFarBlock() {
         assertFalse(SteveAPI.withinRadius(0, 64, 0, 500, 64, 0, 64));
     }
+
+    @Test
+    void withinRadiusInclusiveAtExactBoundary() {
+        // A block exactly `radius` away must be allowed (the contract is <=, not <).
+        assertTrue(SteveAPI.withinRadius(0, 0, 0, 64, 0, 0, 64));
+    }
 }
