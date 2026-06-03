@@ -41,10 +41,12 @@ public class ActionExecutor {
     private int ticksSinceLastAction;
     private BaseAction idleFollowAction;  // Follow player when idle
 
-    // NEW: Async planning support (non-blocking LLM calls)
-    private CompletableFuture<ResponseParser.ParsedResponse> planningFuture;
+    // Async code-generation planning (non-blocking LLM calls)
+    private CompletableFuture<String> codeFuture;
     private boolean isPlanning = false;
-    private String pendingCommand;  // Store command while planning
+    private String pendingCommand;
+    private int codeAttempts;
+    private String lastCodeError;
 
     // NEW: Plugin architecture components
     private final ActionContext actionContext;
@@ -58,8 +60,10 @@ public class ActionExecutor {
         this.taskQueue = new LinkedList<>();
         this.ticksSinceLastAction = 0;
         this.idleFollowAction = null;
-        this.planningFuture = null;
+        this.codeFuture = null;
         this.pendingCommand = null;
+        this.codeAttempts = 0;
+        this.lastCodeError = null;
 
         // Initialize plugin architecture components
         this.eventBus = new SimpleEventBus();
@@ -131,28 +135,27 @@ public class ActionExecutor {
         }
 
         try {
-            // Store command and start async planning
             this.pendingCommand = command;
             this.isPlanning = true;
+            this.codeAttempts = 0;
+            this.lastCodeError = null;
 
-            // Send immediate feedback to user
             sendToGUI(steve.getSteveName(), "Thinking...");
 
-            // Start async LLM call - returns immediately!
-            planningFuture = getTaskPlanner().planTasksAsync(steve, command);
+            codeFuture = getTaskPlanner().planCodeAsync(steve, command, null);
 
-            SteveMod.LOGGER.info("Steve '{}' started async planning for: {}", steve.getSteveName(), command);
+            SteveMod.LOGGER.info("Steve '{}' started code planning for: {}", steve.getSteveName(), command);
 
         } catch (NoClassDefFoundError e) {
             SteveMod.LOGGER.error("Failed to initialize AI components", e);
             sendToGUI(steve.getSteveName(), "Sorry, I'm having trouble with my AI systems!");
             isPlanning = false;
-            planningFuture = null;
+            codeFuture = null;
         } catch (Exception e) {
-            SteveMod.LOGGER.error("Error starting async planning", e);
+            SteveMod.LOGGER.error("Error starting code planning", e);
             sendToGUI(steve.getSteveName(), "Oops, something went wrong!");
             isPlanning = false;
-            planningFuture = null;
+            codeFuture = null;
         }
     }
 
@@ -218,39 +221,19 @@ public class ActionExecutor {
     public void tick() {
         ticksSinceLastAction++;
 
-        // Check if async planning is complete (non-blocking check!)
-        if (isPlanning && planningFuture != null && planningFuture.isDone()) {
+        if (isPlanning && codeFuture != null && codeFuture.isDone()) {
+            String code = null;
             try {
-                ResponseParser.ParsedResponse response = planningFuture.get();
-
-                if (response != null) {
-                    currentGoal = response.getPlan();
-                    steve.getMemory().setCurrentGoal(currentGoal);
-
-                    taskQueue.clear();
-                    taskQueue.addAll(response.getTasks());
-
-                    if (SteveConfig.ENABLE_CHAT_RESPONSES.get()) {
-                        sendToGUI(steve.getSteveName(), "Okay! " + currentGoal);
-                    }
-
-                    SteveMod.LOGGER.info("Steve '{}' async planning complete: {} tasks queued",
-                        steve.getSteveName(), taskQueue.size());
-                } else {
-                    sendToGUI(steve.getSteveName(), "I couldn't understand that command.");
-                    SteveMod.LOGGER.warn("Steve '{}' async planning returned null response", steve.getSteveName());
-                }
-
-            } catch (java.util.concurrent.CancellationException e) {
-                SteveMod.LOGGER.info("Steve '{}' planning was cancelled", steve.getSteveName());
-                sendToGUI(steve.getSteveName(), "Planning cancelled.");
+                code = codeFuture.get();
             } catch (Exception e) {
-                SteveMod.LOGGER.error("Steve '{}' failed to get planning result", steve.getSteveName(), e);
-                sendToGUI(steve.getSteveName(), "Oops, something went wrong while planning!");
-            } finally {
-                isPlanning = false;
-                planningFuture = null;
-                pendingCommand = null;
+                SteveMod.LOGGER.error("Steve '{}' failed to get generated code", steve.getSteveName(), e);
+            }
+            codeFuture = null;
+
+            if (code == null || code.isBlank()) {
+                handleCodeFailure("no program produced");
+            } else {
+                runGeneratedCode(code);
             }
         }
 
@@ -305,6 +288,53 @@ public class ActionExecutor {
         } else if (idleFollowAction != null) {
             idleFollowAction.cancel();
             idleFollowAction = null;
+        }
+    }
+
+    /** Run a generated program on the server thread; commit on success, retry/give-up on failure. */
+    private void runGeneratedCode(String code) {
+        int maxActions = SteveConfig.CODE_MAX_ACTIONS.get();
+        int radius = SteveConfig.CODE_PLACEMENT_RADIUS.get();
+        long stmtLimit = SteveConfig.CODE_STATEMENT_LIMIT.get();
+
+        CodeExecutionEngine engine =
+            CodeExecutionEngine.forEntity(steve, maxActions, radius, stmtLimit);
+        try {
+            CodeExecutionEngine.ExecutionResult result = engine.execute(code);
+            if (result.isSuccess()) {
+                taskQueue.clear();
+                engine.getAPI().drainTo(taskQueue);
+                currentGoal = pendingCommand;
+                steve.getMemory().setCurrentGoal(currentGoal);
+                if (SteveConfig.ENABLE_CHAT_RESPONSES.get()) {
+                    sendToGUI(steve.getSteveName(), "Okay!");
+                }
+                SteveMod.LOGGER.info("Steve '{}' code planning complete: {} tasks queued",
+                    steve.getSteveName(), taskQueue.size());
+                isPlanning = false;
+                pendingCommand = null;
+            } else {
+                handleCodeFailure(result.getError());
+            }
+        } finally {
+            engine.close();
+        }
+    }
+
+    /** Either re-prompt the LLM with the error (retry) or surface a give-up message. */
+    private void handleCodeFailure(String error) {
+        SteveMod.LOGGER.warn("Steve '{}' generated program failed: {}", steve.getSteveName(), error);
+        if (codeAttempts < SteveConfig.CODE_MAX_RETRIES.get()) {
+            codeAttempts++;
+            lastCodeError = error;
+            SteveMod.LOGGER.info("Steve '{}' retrying code generation (attempt {})",
+                steve.getSteveName(), codeAttempts);
+            codeFuture = getTaskPlanner().planCodeAsync(steve, pendingCommand, lastCodeError);
+            // isPlanning stays true — next tick processes the retry future
+        } else {
+            sendToGUI(steve.getSteveName(), "Das kriege ich nicht hin.");
+            isPlanning = false;
+            pendingCommand = null;
         }
     }
 
