@@ -35,6 +35,21 @@ public class SteveMod {
 
     private static SteveManager steveManager;
 
+    /**
+     * Sink for Steve-&gt;user messages, wired by the client to route into the GUI panel.
+     * Stays null on a dedicated server (no client GUI), so server code never references the
+     * client class directly. See ClientSetup for the wiring and ActionExecutor for the calls.
+     */
+    public static volatile java.util.function.BiConsumer<String, String> guiMessageSink;
+
+    /** Routes a Steve message to the GUI panel if a client sink is registered (no-op otherwise). */
+    public static void sendGuiMessage(String steveName, String message) {
+        java.util.function.BiConsumer<String, String> sink = guiMessageSink;
+        if (sink != null) {
+            sink.accept(steveName, message);
+        }
+    }
+
     public SteveMod(IEventBus modEventBus, ModContainer modContainer) {
         ENTITIES.register(modEventBus);
 

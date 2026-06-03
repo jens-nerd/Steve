@@ -36,8 +36,10 @@ public class SteveGUI {
     private static List<String> commandHistory = new ArrayList<>();
     private static int historyIndex = -1;
 
-    // Message history and scrolling
-    private static List<ChatMessage> messages = new ArrayList<>();
+    // Message history and scrolling.
+    // CopyOnWriteArrayList: the server thread appends via SteveMod.guiMessageSink while the
+    // render thread iterates this list during overlay rendering.
+    private static List<ChatMessage> messages = new java.util.concurrent.CopyOnWriteArrayList<>();
     private static int scrollOffset = 0;
     private static int maxScroll = 0;
     private static final int BACKGROUND_COLOR = 0x15202020; // Ultra transparent (15 = ~8% opacity)

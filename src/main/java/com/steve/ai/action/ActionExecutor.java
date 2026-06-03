@@ -209,9 +209,10 @@ public class ActionExecutor {
      * Send a message to the GUI pane (client-side only, no chat spam)
      */
     private void sendToGUI(String steveName, String message) {
-        // TODO Phase 2: route to client overlay (SteveGUI). Server-side code must
-        // not reference the client class, so we log the message for now.
         SteveMod.LOGGER.info("[{}] {}", steveName, message);
+        // Route to the client GUI panel via the sink (no-op on a dedicated server; the
+        // sink is wired by ClientSetup so server code stays free of client references).
+        SteveMod.sendGuiMessage(steveName, message);
     }
 
     public void tick() {

@@ -26,6 +26,8 @@ public class ClientSetup {
     @SubscribeEvent
     public static void onClientSetup(FMLClientSetupEvent event) {
         event.enqueueWork(() -> {
+            // Route server-side Steve messages into the GUI panel (client only).
+            SteveMod.guiMessageSink = SteveGUI::addSteveMessage;
         });
     }
 

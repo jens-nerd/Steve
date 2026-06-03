@@ -197,15 +197,21 @@ public class CollaborativeBuildManager {
         
         BuildSection section = build.sections.get(sectionIndex);
         BlockPlacement block = section.getNextBlock();
-        
-        if (block == null) {
-            if (sectionIndex != null) {
-                section = build.sections.get(sectionIndex);
-                block = section.getNextBlock();
-                if (block != null) {                }
+
+        // If this Steve's section is finished but the overall build isn't, reassign it to
+        // another incomplete section (work-stealing). This lets a single Steve complete the
+        // whole structure instead of stopping after its first quadrant, and lets idle Steves
+        // help finish quadrants others started.
+        while (block == null && !build.isComplete()) {
+            build.steveToSectionMap.remove(steveName);
+            Integer newIndex = assignSteveToSection(build, steveName);
+            if (newIndex == null) {
+                return null;
             }
+            section = build.sections.get(newIndex);
+            block = section.getNextBlock();
         }
-        
+
         return block;
     }
     
