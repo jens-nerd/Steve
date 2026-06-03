@@ -44,8 +44,25 @@ repositories {
 }
 
 dependencies {
-    // Application/library dependencies are reintroduced in Phase 1 alongside the
-    // code that uses them (resilience4j, caffeine, commons-codec, graalvm, junit).
+    // Resilience4j — circuit breaker / retry / rate limiter / bulkhead (llm/resilience)
+    implementation 'io.github.resilience4j:resilience4j-circuitbreaker:2.1.0'
+    implementation 'io.github.resilience4j:resilience4j-retry:2.1.0'
+    implementation 'io.github.resilience4j:resilience4j-ratelimiter:2.1.0'
+    implementation 'io.github.resilience4j:resilience4j-bulkhead:2.1.0'
+
+    // Caffeine — LLM response cache (llm/async/LLMCache)
+    implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
+
+    // Apache Commons Codec — SHA-256 cache keys
+    implementation 'commons-codec:commons-codec:1.16.0'
+
+    // GraalVM polyglot — JS execution engine (execution/CodeExecutionEngine), bumped for JDK 25
+    implementation 'org.graalvm.polyglot:polyglot:24.2.1'
+    implementation 'org.graalvm.polyglot:js:24.2.1'
+
+    // JUnit 5
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.3'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.3'
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
@@ -68,4 +85,8 @@ neoForge.ideSyncTask generateModMetadata
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+}
+
+test {
+    useJUnitPlatform()
 }
