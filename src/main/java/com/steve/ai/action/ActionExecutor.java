@@ -225,6 +225,10 @@ public class ActionExecutor {
             String code = null;
             try {
                 code = codeFuture.get();
+            } catch (InterruptedException e) {
+                // Restore the interrupt flag — tick() runs on the server thread.
+                Thread.currentThread().interrupt();
+                SteveMod.LOGGER.error("Steve '{}' interrupted while getting generated code", steve.getSteveName(), e);
             } catch (Exception e) {
                 SteveMod.LOGGER.error("Steve '{}' failed to get generated code", steve.getSteveName(), e);
             }
