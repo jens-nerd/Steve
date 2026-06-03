@@ -37,8 +37,11 @@ public class SteveOverlayScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyEvent keyEvent) {
-        // K key to close
-        if (keyEvent.key() == 75 && !keyEvent.hasShiftDown() && !keyEvent.hasControlDown() && !keyEvent.hasAltDown()) { // K
+        // K closes the panel only when NOT typing. While the command box is focused, K must
+        // reach the input box as a normal character (otherwise typing "k" closes the window).
+        // ESC always closes (handled in SteveGUI.handleKeyPress).
+        if (keyEvent.key() == 75 && !SteveGUI.isInputFocused()
+            && !keyEvent.hasShiftDown() && !keyEvent.hasControlDown() && !keyEvent.hasAltDown()) { // K
             SteveGUI.toggle();
             if (minecraft != null) {
                 minecraft.setScreen(null);

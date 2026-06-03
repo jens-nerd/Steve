@@ -91,6 +91,11 @@ public class SteveGUI {
         return isOpen;
     }
 
+    /** True while the command input box has keyboard focus (i.e. the user is typing). */
+    public static boolean isInputFocused() {
+        return inputBox != null && inputBox.isFocused();
+    }
+
     private static void initializeInputBox() {
         Minecraft mc = Minecraft.getInstance();
         if (inputBox == null) {
