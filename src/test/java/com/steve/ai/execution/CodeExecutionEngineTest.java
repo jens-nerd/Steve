@@ -32,4 +32,23 @@ class CodeExecutionEngineTest {
         assertFalse(result.isSuccess());
         engine.close();
     }
+
+    @Test
+    void javaTypeInteropIsDenied() {
+        SteveAPI api = new SteveAPI(null, 1000, 64);
+        CodeExecutionEngine engine = new CodeExecutionEngine(api, 100_000);
+        var result = engine.execute("Java.type('java.lang.Runtime');");
+        assertFalse(result.isSuccess(), "Java.type interop must be denied");
+        engine.close();
+    }
+
+    @Test
+    void nonExportedMethodIsNotCallableFromJs() {
+        SteveAPI api = new SteveAPI(null, 1000, 64);
+        CodeExecutionEngine engine = new CodeExecutionEngine(api, 100_000);
+        // clearBuffer() exists on SteveAPI but is NOT @HostAccess.Export, so JS must not reach it.
+        var result = engine.execute("steve.clearBuffer();");
+        assertFalse(result.isSuccess(), "non-@Export methods must be invisible to JS");
+        engine.close();
+    }
 }

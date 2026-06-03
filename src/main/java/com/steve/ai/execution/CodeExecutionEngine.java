@@ -17,6 +17,9 @@ public class CodeExecutionEngine {
     private final Context graalContext;
 
     public CodeExecutionEngine(SteveAPI api, long statementLimit) {
+        if (statementLimit <= 0) {
+            throw new IllegalArgumentException("statementLimit must be positive, got " + statementLimit);
+        }
         this.steveAPI = api;
 
         HostAccess access = HostAccess.newBuilder()
@@ -75,22 +78,6 @@ public class CodeExecutionEngine {
     }
 
     /**
-     * Validate JavaScript code syntax without executing.
-     *
-     * @param code JavaScript code to validate
-     * @return true if syntax is valid, false otherwise
-     */
-    public boolean validateSyntax(String code) {
-        try {
-            // Parse without executing by wrapping in function
-            graalContext.eval("js", "function __validate() { " + code + " }");
-            return true;
-        } catch (PolyglotException e) {
-            return false;
-        }
-    }
-
-    /**
      * Get the Steve API bridge.
      */
     public SteveAPI getAPI() {
@@ -104,8 +91,11 @@ public class CodeExecutionEngine {
         if (graalContext != null) {
             try {
                 graalContext.close(true);
-            } catch (PolyglotException e) {
-                // Suppress: closing a context that hit a resource limit can re-throw the limit exception.
+            } catch (org.graalvm.polyglot.PolyglotException e) {
+                if (!e.isResourceExhausted()) {
+                    throw e;
+                }
+                // else: GraalVM re-throws the pending statement-limit exception on close — safe to ignore.
             }
         }
     }
