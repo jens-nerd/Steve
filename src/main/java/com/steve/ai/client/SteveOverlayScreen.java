@@ -23,6 +23,13 @@ public class SteveOverlayScreen extends Screen {
     }
 
     @Override
+    public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        // No background blur/dim: this is a transparent input-capture screen, so the world
+        // stays fully visible behind the side panel (Cursor-style). Overriding to a no-op
+        // skips the vanilla in-world blur + darkening.
+    }
+
+    @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         // Don't render anything - the SteveGUI renders via overlay
         // This screen is just to capture input
