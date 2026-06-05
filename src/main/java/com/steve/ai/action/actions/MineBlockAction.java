@@ -30,6 +30,8 @@ public class MineBlockAction extends BaseAction {
     private int miningDirectionX = 0; // Direction to mine (-1, 0, or 1)
     private int miningDirectionZ = 0; // Direction to mine (-1, 0, or 1)
     private int ticksSinceLastMine = 0; // Delay between mining blocks
+    private int targetDepth; // Y level to descend to before branch-mining (from ORE_DEPTHS)
+    private boolean descending; // true while digging the vertical shaft down to targetDepth
     private static final int MAX_TICKS = 24000; // 20 minutes for deep mining
     private static final int TORCH_INTERVAL = 100; // Place torch every 5 seconds (100 ticks)
     private static final int MIN_LIGHT_LEVEL = 8;
@@ -38,7 +40,7 @@ public class MineBlockAction extends BaseAction {
     
     // Ore depth mappings for intelligent mining
     private static final Map<String, Integer> ORE_DEPTHS = new HashMap<>() {{
-        put("iron_ore", 64);  // Iron spawns well at Y=64 and below
+        put("iron_ore", 32);  // Iron is dense around Y=16-48; dig to 32 (above lava, plenty of iron)
         put("deepslate_iron_ore", -16); // Deep iron
         put("coal_ore", 96);
         put("copper_ore", 48);
@@ -74,62 +76,47 @@ public class MineBlockAction extends BaseAction {
         }
         
         net.minecraft.world.entity.player.Player nearestPlayer = findNearestPlayer();
+        BlockPos origin = (nearestPlayer != null) ? nearestPlayer.blockPosition() : steve.blockPosition();
+
+        // Mining direction follows the player's look (so the tunnel heads where they look), else East.
         if (nearestPlayer != null) {
-            net.minecraft.world.phys.Vec3 eyePos = nearestPlayer.getEyePosition(1.0F);
             net.minecraft.world.phys.Vec3 lookVec = nearestPlayer.getLookAngle();
-            
-            double angle = Math.atan2(lookVec.z, lookVec.x) * 180.0 / Math.PI;
-            angle = (angle + 360) % 360;
-            
-            if (angle >= 315 || angle < 45) {
-                miningDirectionX = 1; miningDirectionZ = 0; // East (+X)
-            } else if (angle >= 45 && angle < 135) {
-                miningDirectionX = 0; miningDirectionZ = 1; // South (+Z)
-            } else if (angle >= 135 && angle < 225) {
-                miningDirectionX = -1; miningDirectionZ = 0; // West (-X)
-            } else {
-                miningDirectionX = 0; miningDirectionZ = -1; // North (-Z)
-            }
-            
-            net.minecraft.world.phys.Vec3 targetPos = eyePos.add(lookVec.scale(3));
-            
-            BlockPos lookTarget = new BlockPos(
-                (int)Math.floor(targetPos.x),
-                (int)Math.floor(targetPos.y),
-                (int)Math.floor(targetPos.z)
-            );
-            
-            miningStartPos = lookTarget;
-            for (int y = lookTarget.getY(); y > lookTarget.getY() - 20 && y > -64; y--) {
-                BlockPos groundCheck = new BlockPos(lookTarget.getX(), y, lookTarget.getZ());
-                if (steve.level().getBlockState(groundCheck).isSolid()) {
-                    miningStartPos = groundCheck.above(); // Stand on top of solid block
-                    break;
-                }
-            }
-            
-            currentTunnelPos = miningStartPos;
-            steve.teleportTo(miningStartPos.getX() + 0.5, miningStartPos.getY(), miningStartPos.getZ() + 0.5);
-            
-            String[] dirNames = {"North", "East", "South", "West"};
-            int dirIndex = miningDirectionZ == -1 ? 0 : (miningDirectionX == 1 ? 1 : (miningDirectionZ == 1 ? 2 : 3));
-            SteveMod.LOGGER.info("Steve '{}' mining {} in ONE direction: {}", 
-                steve.getSteveName(), targetBlock.getName().getString(), dirNames[dirIndex]);
+            double angle = (Math.atan2(lookVec.z, lookVec.x) * 180.0 / Math.PI + 360) % 360;
+            if (angle >= 315 || angle < 45) { miningDirectionX = 1; miningDirectionZ = 0; }   // East
+            else if (angle < 135) { miningDirectionX = 0; miningDirectionZ = 1; }              // South
+            else if (angle < 225) { miningDirectionX = -1; miningDirectionZ = 0; }             // West
+            else { miningDirectionX = 0; miningDirectionZ = -1; }                              // North
         } else {
-            miningStartPos = steve.blockPosition();
-            currentTunnelPos = miningStartPos;
-            miningDirectionX = 1; // Default to East
-            miningDirectionZ = 0;
+            miningDirectionX = 1; miningDirectionZ = 0;
         }
-        
+
+        // Start the shaft two blocks from the player (so Steve doesn't dig under their feet),
+        // at the ground surface of that column.
+        int sx = origin.getX() + miningDirectionX * 2;
+        int sz = origin.getZ() + miningDirectionZ * 2;
+        int surfaceY = findSurfaceY(sx, origin.getY(), sz);
+        miningStartPos = new BlockPos(sx, surfaceY, sz);
+        currentTunnelPos = miningStartPos;
+
+        // Descend to the ore's natural depth before branch-mining. THIS is the fix for
+        // "mines at look-height and never reaches iron": iron is deep underground, so Steve
+        // first digs a vertical shaft down, then tunnels horizontally and scans the walls.
+        String oreKey = BuiltInRegistries.BLOCK.getKey(targetBlock).getPath();
+        targetDepth = ORE_DEPTHS.getOrDefault(oreKey, surfaceY);
+        if (targetDepth > surfaceY) {
+            targetDepth = surfaceY; // never dig "up"
+        }
+        descending = currentTunnelPos.getY() > targetDepth;
+
+        steve.teleportTo(miningStartPos.getX() + 0.5, miningStartPos.getY(), miningStartPos.getZ() + 0.5);
+        // Hover while teleport-mining. Steve now digs DOWNWARD into the ground, so he stays
+        // underground — this no longer looks like "flying up into the air".
         steve.setFlying(true);
-        
         equipIronPickaxe();
-        
-        SteveMod.LOGGER.info("Steve '{}' mining {} - staying at {} [SLOW & VISIBLE]", 
-            steve.getSteveName(), targetBlock.getName().getString(), miningStartPos);
-        
-        // Look for ore nearby
+
+        SteveMod.LOGGER.info("Steve '{}' mining {} - shaft start {}, descending to y={} then tunneling",
+            steve.getSteveName(), targetBlock.getName().getString(), miningStartPos, targetDepth);
+
         findNextBlock();
     }
 
@@ -255,65 +242,94 @@ public class MineBlockAction extends BaseAction {
     }
 
     /**
-     * Mine forward in ONE DIRECTION - creates a straight tunnel!
-     * Steve progresses forward block by block
+     * Dig toward ore: a vertical shaft down to the ore depth, then a horizontal branch tunnel.
      */
     private void mineNearbyBlock() {
-        BlockPos centerPos = currentTunnelPos;
-        BlockPos abovePos = centerPos.above();
-        BlockPos belowPos = centerPos.below();
-        
-        BlockState centerState = steve.level().getBlockState(centerPos);
-        if (!centerState.isAir() && centerState.getBlock() != Blocks.BEDROCK) {
-            steve.teleportTo(centerPos.getX() + 0.5, centerPos.getY(), centerPos.getZ() + 0.5);
-            steve.swing(InteractionHand.MAIN_HAND, true);
-            steve.level().destroyBlock(centerPos, true);
-            SteveMod.LOGGER.info("Steve '{}' mining tunnel at {}", steve.getSteveName(), centerPos);
+        if (descending && currentTunnelPos.getY() > targetDepth) {
+            mineDownward();
+        } else {
+            descending = false;
+            mineForward();
         }
-        
-        BlockState aboveState = steve.level().getBlockState(abovePos);
-        if (!aboveState.isAir() && aboveState.getBlock() != Blocks.BEDROCK) {
-            steve.swing(InteractionHand.MAIN_HAND, true);
-            steve.level().destroyBlock(abovePos, true);
+    }
+
+    /** Dig one step straight down (the descent shaft). */
+    private void mineDownward() {
+        BlockPos below = currentTunnelPos.below();
+        BlockState belowState = steve.level().getBlockState(below);
+
+        // Stop descending at bedrock or any fluid (lava/water) — switch to horizontal mining.
+        if (belowState.getBlock() == Blocks.BEDROCK || !belowState.getFluidState().isEmpty()) {
+            descending = false;
+            return;
         }
-        
-        BlockState belowState = steve.level().getBlockState(belowPos);
-        if (!belowState.isAir() && belowState.getBlock() != Blocks.BEDROCK) {
-            steve.swing(InteractionHand.MAIN_HAND, true);
-            steve.level().destroyBlock(belowPos, true);
-        }
-        
+
+        clearBlock(below);
+        currentTunnelPos = below;
+        steve.teleportTo(currentTunnelPos.getX() + 0.5, currentTunnelPos.getY(), currentTunnelPos.getZ() + 0.5);
+        SteveMod.LOGGER.info("Steve '{}' digging shaft down to y={} (target {})",
+            steve.getSteveName(), currentTunnelPos.getY(), targetDepth);
+        ticksSinceLastMine = 0;
+    }
+
+    /** Dig one step forward (the horizontal branch tunnel at ore depth). Leaves the floor intact. */
+    private void mineForward() {
+        clearBlock(currentTunnelPos);          // feet
+        clearBlock(currentTunnelPos.above());  // head room
+        steve.teleportTo(currentTunnelPos.getX() + 0.5, currentTunnelPos.getY(), currentTunnelPos.getZ() + 0.5);
+        SteveMod.LOGGER.info("Steve '{}' mining tunnel at {}", steve.getSteveName(), currentTunnelPos);
         currentTunnelPos = currentTunnelPos.offset(miningDirectionX, 0, miningDirectionZ);
-        
-        ticksSinceLastMine = 0; // Reset delay
+        ticksSinceLastMine = 0;
+    }
+
+    /** Destroy a block if it is not air or bedrock. */
+    private void clearBlock(BlockPos pos) {
+        BlockState state = steve.level().getBlockState(pos);
+        if (!state.isAir() && state.getBlock() != Blocks.BEDROCK) {
+            steve.swing(InteractionHand.MAIN_HAND, true);
+            steve.level().destroyBlock(pos, true);
+        }
+    }
+
+    /** Find the top solid ground at column (x,z), scanning down from just above {@code fromY}. */
+    private int findSurfaceY(int x, int fromY, int z) {
+        for (int y = fromY + 3; y > -64; y--) {
+            BlockPos p = new BlockPos(x, y, z);
+            if (steve.level().getBlockState(p).isSolid()
+                && steve.level().getBlockState(p.above()).isAir()) {
+                return y + 1; // stand on top of the ground
+            }
+        }
+        return fromY;
     }
 
     /**
-     * Find ore blocks in the tunnel ahead
-     * Searches forward in the mining direction
+     * Find the target ore near Steve's current dig position by scanning a small 3D box.
+     * This lets him discover ore exposed in the shaft and tunnel walls as he digs.
      */
     private void findNextBlock() {
         List<BlockPos> foundBlocks = new ArrayList<>();
-        
-        for (int distance = 0; distance < 20; distance++) {
-            BlockPos checkPos = currentTunnelPos.offset(miningDirectionX * distance, 0, miningDirectionZ * distance);
-            
-            for (int y = -1; y <= 1; y++) {
-                BlockPos orePos = checkPos.offset(0, y, 0);
-                if (steve.level().getBlockState(orePos).getBlock() == targetBlock) {
-                    foundBlocks.add(orePos);
+
+        int r = 3;
+        for (int dx = -r; dx <= r; dx++) {
+            for (int dy = -r; dy <= r; dy++) {
+                for (int dz = -r; dz <= r; dz++) {
+                    BlockPos orePos = currentTunnelPos.offset(dx, dy, dz);
+                    if (steve.level().getBlockState(orePos).getBlock() == targetBlock) {
+                        foundBlocks.add(orePos);
+                    }
                 }
             }
         }
-        
+
         if (!foundBlocks.isEmpty()) {
             currentTarget = foundBlocks.stream()
                 .min((a, b) -> Double.compare(a.distSqr(currentTunnelPos), b.distSqr(currentTunnelPos)))
                 .orElse(null);
-            
+
             if (currentTarget != null) {
-                SteveMod.LOGGER.info("Steve '{}' found {} ahead in tunnel at {}", 
-                    steve.getSteveName(), targetBlock.getName().getString(), currentTarget);
+                SteveMod.LOGGER.info("Steve '{}' found {} near {} at {}",
+                    steve.getSteveName(), targetBlock.getName().getString(), currentTunnelPos, currentTarget);
             }
         }
     }
