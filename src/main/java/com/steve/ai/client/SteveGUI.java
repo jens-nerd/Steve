@@ -453,7 +453,9 @@ public class SteveGUI {
         String[] parts = command.split(",");
         for (String part : parts) {
             String trimmed = part.trim();
-            String firstWord = trimmed.split(" ")[0].toLowerCase();
+            // Strip punctuation so "Bob:", "Bob," or "Bob!" still match the name "bob"
+            // (otherwise an unrecognised name falls through to the all-Steves default).
+            String firstWord = trimmed.split(" ")[0].toLowerCase().replaceAll("[^a-z0-9]", "");
 
             if (availableNames.contains(firstWord)) {
                 for (SteveEntity steve : allSteves) {
