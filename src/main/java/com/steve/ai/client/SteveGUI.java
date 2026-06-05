@@ -403,9 +403,13 @@ public class SteveGUI {
         List<String> targetSteves = parseTargetSteves(command);
 
         if (targetSteves.isEmpty()) {
+            // No name given: address ALL Steves (each gets the command). Name a Steve
+            // (e.g. "Bob mine iron") or "Bob, Charlie ..." to target specific ones.
             var steves = SteveMod.getSteveManager().getAllSteves();
             if (!steves.isEmpty()) {
-                targetSteves.add(steves.iterator().next().getSteveName());
+                for (SteveEntity steve : steves) {
+                    targetSteves.add(steve.getSteveName());
+                }
             } else {
                 // No Steves available
                 addSystemMessage("No Steve agents found! Use 'spawn <name>' to create one.");
