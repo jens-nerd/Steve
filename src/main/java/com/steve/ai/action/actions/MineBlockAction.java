@@ -253,21 +253,29 @@ public class MineBlockAction extends BaseAction {
         }
     }
 
-    /** Dig one step straight down (the descent shaft). */
+    /**
+     * Dig one diagonal step down (a walkable stairway): one block forward in the mining
+     * direction AND one block down. Unlike a vertical shaft this is safe to walk into —
+     * the block under each step stays solid as the floor, so a player can't fall to their death.
+     */
     private void mineDownward() {
-        BlockPos below = currentTunnelPos.below();
-        BlockState belowState = steve.level().getBlockState(below);
+        BlockPos next = currentTunnelPos.offset(miningDirectionX, -1, miningDirectionZ);
+        BlockState nextState = steve.level().getBlockState(next);
+        BlockState floorState = steve.level().getBlockState(next.below());
 
-        // Stop descending at bedrock or any fluid (lava/water) — switch to horizontal mining.
-        if (belowState.getBlock() == Blocks.BEDROCK || !belowState.getFluidState().isEmpty()) {
+        // Stop at bedrock or any fluid (lava/water) in the step or its floor — branch horizontally.
+        if (nextState.getBlock() == Blocks.BEDROCK || !nextState.getFluidState().isEmpty()
+            || floorState.getBlock() == Blocks.BEDROCK || !floorState.getFluidState().isEmpty()) {
             descending = false;
             return;
         }
 
-        clearBlock(below);
-        currentTunnelPos = below;
+        // Carve a 2-high walkable step (feet + head); leave next.below() intact as the stair tread.
+        clearBlock(next);
+        clearBlock(next.above());
+        currentTunnelPos = next;
         steve.teleportTo(currentTunnelPos.getX() + 0.5, currentTunnelPos.getY(), currentTunnelPos.getZ() + 0.5);
-        SteveMod.LOGGER.info("Steve '{}' digging shaft down to y={} (target {})",
+        SteveMod.LOGGER.info("Steve '{}' digging stairway down to y={} (target {})",
             steve.getSteveName(), currentTunnelPos.getY(), targetDepth);
         ticksSinceLastMine = 0;
     }
