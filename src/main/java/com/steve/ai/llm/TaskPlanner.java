@@ -226,6 +226,9 @@ public class TaskPlanner {
                     String code = CodeExtractor.extract(content);
                     SteveMod.LOGGER.info("[Code] Program received ({} chars, {}ms, {} tokens, cache: {})",
                         code.length(), response.getLatencyMs(), response.getTokensUsed(), response.isFromCache());
+                    // Log the actual generated program so in-game misbehaviour can be diagnosed
+                    // (e.g. which API calls / coordinates the LLM produced).
+                    SteveMod.LOGGER.info("[Code] Generated program for '{}':\n{}", command, code);
                     return code;
                 })
                 .exceptionally(t -> {
