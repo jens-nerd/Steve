@@ -10,6 +10,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 
 public class SteveCommands {
@@ -121,11 +122,12 @@ public class SteveCommands {
         if (steve != null) {
             // Disabled command feedback message
             // source.sendSuccess(() -> Component.literal("Instructing " + name + ": " + command), true);
-            
+
+            Player requester = (source.getEntity() instanceof Player p) ? p : null;
             new Thread(() -> {
-                steve.getActionExecutor().processNaturalLanguageCommand(command);
+                steve.getActionExecutor().processNaturalLanguageCommand(command, requester);
             }).start();
-            
+
             return 1;
         } else {
             source.sendFailure(Component.literal("Steve not found: " + name));

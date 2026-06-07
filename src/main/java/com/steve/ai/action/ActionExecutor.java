@@ -14,6 +14,9 @@ import com.steve.ai.entity.SteveEntity;
 import com.steve.ai.plugin.ActionRegistry;
 import com.steve.ai.plugin.PluginManager;
 
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.player.Player;
+
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
@@ -47,6 +50,13 @@ public class ActionExecutor {
     private String pendingCommand;
     private int codeAttempts;
     private String lastCodeError;
+
+    // "bring it here" delivery state
+    private boolean deliveryMode = false;
+    private Player deliveryTarget;
+    private BlockPos chestPos;
+    private BaseAction deliveryAction;
+    private static final int HALF_STACK = 32;
 
     // NEW: Plugin architecture components
     private final ActionContext actionContext;
@@ -114,6 +124,14 @@ public class ActionExecutor {
      * @param command The natural language command from the user
      */
     public void processNaturalLanguageCommand(String command) {
+        processNaturalLanguageCommand(command, null);
+    }
+
+    /**
+     * @param command   the natural language command from the user
+     * @param requester the player who issued the command (may be null), used for "bring it here" delivery
+     */
+    public void processNaturalLanguageCommand(String command, Player requester) {
         SteveMod.LOGGER.info("Steve '{}' processing command (async): {}", steve.getSteveName(), command);
 
         // If already planning, ignore new commands
@@ -132,6 +150,14 @@ public class ActionExecutor {
         if (idleFollowAction != null) {
             idleFollowAction.cancel();
             idleFollowAction = null;
+        }
+
+        this.deliveryMode = DeliveryHelper.isBringItHere(command) && requester != null;
+        this.deliveryTarget = requester;
+        this.chestPos = null;
+        if (deliveryAction != null) {
+            deliveryAction.cancel();
+            deliveryAction = null;
         }
 
         try {
@@ -427,6 +453,13 @@ public class ActionExecutor {
         }
         taskQueue.clear();
         currentGoal = null;
+        deliveryMode = false;
+        deliveryTarget = null;
+        chestPos = null;
+        if (deliveryAction != null) {
+            deliveryAction.cancel();
+            deliveryAction = null;
+        }
 
         // Reset state machine
         stateMachine.reset();
