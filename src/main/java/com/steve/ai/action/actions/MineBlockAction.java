@@ -6,11 +6,14 @@ import com.steve.ai.action.Task;
 import com.steve.ai.entity.SteveEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -165,6 +168,7 @@ public class MineBlockAction extends BaseAction {
             steve.swing(InteractionHand.MAIN_HAND, true);
             
             steve.level().destroyBlock(currentTarget, true);
+            collectDropsNear(currentTarget);
             minedCount++;
             ticksSinceLastMine = 0; // Reset delay timer
             
@@ -309,6 +313,20 @@ public class MineBlockAction extends BaseAction {
             }
         }
         return fromY;
+    }
+
+    /** Pull any items dropped near {@code pos} into Steve's inventory. */
+    private void collectDropsNear(BlockPos pos) {
+        AABB box = new AABB(pos).inflate(2.0);
+        List<ItemEntity> drops = steve.level().getEntitiesOfClass(ItemEntity.class, box);
+        for (ItemEntity drop : drops) {
+            ItemStack leftover = steve.addToInventory(drop.getItem());
+            if (leftover.isEmpty()) {
+                drop.discard();
+            } else {
+                drop.setItem(leftover); // inventory full — leave the rest on the ground
+            }
+        }
     }
 
     /**
