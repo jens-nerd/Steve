@@ -15,7 +15,9 @@ import com.steve.ai.plugin.ActionRegistry;
 import com.steve.ai.plugin.PluginManager;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.block.Blocks;
 
 import java.util.LinkedList;
 import java.util.Queue;
@@ -267,6 +269,36 @@ public class ActionExecutor {
             }
         }
 
+        if (deliveryMode) {
+            if (chestPos == null) {
+                chestPos = placeDeliveryChest();
+            }
+
+            if (deliveryAction != null) {
+                if (deliveryAction.isComplete()) {
+                    deliveryAction = null;
+                } else {
+                    deliveryAction.tick();
+                    return; // mining stays paused while delivering
+                }
+            }
+
+            boolean workActive = currentAction != null || !taskQueue.isEmpty();
+            boolean canDeliver = chestPos != null && deliveryAction == null;
+            boolean shouldShuttle = canDeliver && steve.collectedCount() >= HALF_STACK;
+            boolean shouldFinalDeposit = canDeliver && !workActive && steve.collectedCount() > 0;
+
+            if (shouldShuttle || shouldFinalDeposit) {
+                deliveryAction = new DeliverToChestAction(steve, chestPos);
+                deliveryAction.start();
+                return;
+            }
+
+            if (!workActive && steve.collectedCount() == 0) {
+                deliveryMode = false; // job done and everything delivered
+            }
+        }
+
         if (currentAction != null) {
             if (currentAction.isComplete()) {
                 ActionResult result = currentAction.getResult();
@@ -319,6 +351,29 @@ public class ActionExecutor {
             idleFollowAction.cancel();
             idleFollowAction = null;
         }
+    }
+
+    /** Place a chest one block in front of the requesting player, on the ground. Returns null if impossible. */
+    private BlockPos placeDeliveryChest() {
+        if (deliveryTarget == null) {
+            return null;
+        }
+        BlockPos base =
+            DeliveryHelper.chestPositionInFront(deliveryTarget.blockPosition(), deliveryTarget.getDirection());
+
+        // Find an air cell with a solid block beneath it, scanning a few blocks vertically.
+        for (int dy = 1; dy >= -3; dy--) {
+            BlockPos spot = base.offset(0, dy, 0);
+            boolean spotFree = steve.level().getBlockState(spot).canBeReplaced();
+            boolean groundSolid = steve.level().getBlockState(spot.below()).isSolid();
+            if (spotFree && groundSolid) {
+                steve.level().setBlock(spot, Blocks.CHEST.defaultBlockState(), 3);
+                SteveMod.LOGGER.info("Steve '{}' placed delivery chest at {}", steve.getSteveName(), spot);
+                return spot;
+            }
+        }
+        SteveMod.LOGGER.warn("Steve '{}' could not place delivery chest near {}", steve.getSteveName(), base);
+        return null;
     }
 
     /** Run a generated program on the server thread; commit on success, retry/give-up on failure. */
