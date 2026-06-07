@@ -59,6 +59,7 @@ public class ActionExecutor {
     private BlockPos chestPos;
     private BaseAction deliveryAction;
     private static final int HALF_STACK = 32;
+    private int countBeforeShuttle = 0;
 
     // NEW: Plugin architecture components
     private final ActionContext actionContext;
@@ -276,7 +277,14 @@ public class ActionExecutor {
 
             if (deliveryAction != null) {
                 if (deliveryAction.isComplete()) {
+                    boolean madeProgress = steve.collectedCount() < countBeforeShuttle;
                     deliveryAction = null;
+                    if (!madeProgress && steve.collectedCount() > 0) {
+                        SteveMod.LOGGER.warn("Steve '{}' delivery made no progress (chest full?) — stopping delivery, {} items kept",
+                            steve.getSteveName(), steve.collectedCount());
+                        deliveryMode = false;
+                        return; // resume mining next tick
+                    }
                 } else {
                     deliveryAction.tick();
                     return; // mining stays paused while delivering
@@ -289,12 +297,13 @@ public class ActionExecutor {
             boolean shouldFinalDeposit = canDeliver && !workActive && steve.collectedCount() > 0;
 
             if (shouldShuttle || shouldFinalDeposit) {
+                countBeforeShuttle = steve.collectedCount();
                 deliveryAction = new DeliverToChestAction(steve, chestPos);
                 deliveryAction.start();
                 return;
             }
 
-            if (!workActive && steve.collectedCount() == 0) {
+            if (!isPlanning && !workActive && steve.collectedCount() == 0) {
                 deliveryMode = false; // job done and everything delivered
             }
         }
