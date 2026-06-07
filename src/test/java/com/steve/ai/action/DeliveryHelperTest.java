@@ -14,9 +14,23 @@ class DeliveryHelperTest {
     }
 
     @Test
+    void detectsNaturalDeliveryPhrasings() {
+        assertTrue(DeliveryHelper.isBringItHere("find one stack of iron and bring it to me"));
+        assertTrue(DeliveryHelper.isBringItHere("mine iron and BRING IT TO ME"));
+        assertTrue(DeliveryHelper.isBringItHere("mine iron and bring them here"));
+        assertTrue(DeliveryHelper.isBringItHere("mine iron and bring it back"));
+    }
+
+    @Test
     void rejectsWhenPhraseAbsentOrNull() {
         assertFalse(DeliveryHelper.isBringItHere("mine some iron"));
         assertFalse(DeliveryHelper.isBringItHere(null));
+    }
+
+    @Test
+    void rejectsBringWithoutADeliveryTargetAndTargetWithoutBring() {
+        assertFalse(DeliveryHelper.isBringItHere("bring a torch"));   // "bring" but no target
+        assertFalse(DeliveryHelper.isBringItHere("mine iron here"));  // target word but no "bring"
     }
 
     @Test
