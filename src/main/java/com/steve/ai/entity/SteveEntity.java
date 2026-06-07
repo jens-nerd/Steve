@@ -7,7 +7,9 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.DifficultyInstance;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -31,6 +33,7 @@ public class SteveEntity extends PathfinderMob {
     private int tickCounter = 0;
     private boolean isFlying = false;
     private boolean isInvulnerable = false;
+    private final SimpleContainer inventory = new SimpleContainer(27);
 
     public SteveEntity(EntityType<? extends PathfinderMob> entityType, Level level) {
         super(entityType, level);
@@ -89,6 +92,28 @@ public class SteveEntity extends PathfinderMob {
 
     public ActionExecutor getActionExecutor() {
         return this.actionExecutor;
+    }
+
+    /** Steve's collected-items inventory (chest-sized). */
+    public SimpleContainer getInventory() {
+        return this.inventory;
+    }
+
+    /**
+     * Add a stack to Steve's inventory.
+     * @return the leftover that did not fit (empty if all fit).
+     */
+    public ItemStack addToInventory(ItemStack stack) {
+        return this.inventory.addItem(stack);
+    }
+
+    /** Total number of collected items across all inventory slots. */
+    public int collectedCount() {
+        int total = 0;
+        for (int i = 0; i < this.inventory.getContainerSize(); i++) {
+            total += this.inventory.getItem(i).getCount();
+        }
+        return total;
     }
 
     @Override
